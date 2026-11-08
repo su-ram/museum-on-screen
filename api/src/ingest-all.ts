@@ -19,8 +19,8 @@ const budget = Number(flag("budget")[0] ?? 150_000);
 const sources = (flag("museum").length ? flag("museum") : ["cleveland", "aic", "met"]) as MuseumSource[];
 const STATE = flag("state")[0] ?? "data/ingest-state.json";
 
-interface State { rijks: { next: string | null; done: boolean }; smk: { offset: number; done: boolean }; nga: { done: boolean }; cleveland: { skip: number; done: boolean }; aic: { page: number; done: boolean }; met: { ids: number[] | null; idx: number; done: boolean }; total: number }
-const fresh = (): State => ({ rijks: { next: null, done: false }, smk: { offset: 0, done: false }, nga: { done: false }, cleveland: { skip: 0, done: false }, aic: { page: 1, done: false }, met: { ids: null, idx: 0, done: false }, total: 0 });
+interface State { smithsonian: { unit: number; start: number; done: boolean }; rijks: { next: string | null; done: boolean }; smk: { offset: number; done: boolean }; nga: { done: boolean }; cleveland: { skip: number; done: boolean }; aic: { page: number; done: boolean }; met: { ids: number[] | null; idx: number; done: boolean }; total: number }
+const fresh = (): State => ({ smithsonian: { unit: 0, start: 0, done: false }, rijks: { next: null, done: false }, smk: { offset: 0, done: false }, nga: { done: false }, cleveland: { skip: 0, done: false }, aic: { page: 1, done: false }, met: { ids: null, idx: 0, done: false }, total: 0 });
 mkdirSync("data", { recursive: true });
 const state: State = argv.includes("--reset") || !existsSync(STATE) ? fresh() : { ...fresh(), ...JSON.parse(readFileSync(STATE, "utf8")) };
 const save = () => writeFileSync(STATE, JSON.stringify(state));
@@ -292,7 +292,53 @@ async function rijks() {
   }
 }
 
-const jobs: Record<MuseumSource, () => Promise<void>> = { cleveland, aic, met, smk, nga, rijks };
+// ---- Smithsonian (USA): Open Access API, needs SMITHSONIAN_API_KEY (api/.env) ----------------
+// Art-focused units only; only media flagged CC0 is ingested.
+const SI_UNITS: [code: string, name: string][] = [
+  ["SAAM", "Smithsonian American Art Museum"], ["NPG", "National Portrait Gallery"], ["FSG", "Freer Gallery of Art & Arthur M. Sackler Gallery"],
+  ["HMSG", "Hirshhorn Museum and Sculpture Garden"], ["NMAfA", "National Museum of African Art"],
+];
+
+async function smithsonian() {
+  const key = process.env.SMITHSONIAN_API_KEY;
+  if (!key) throw new Error("SMITHSONIAN_API_KEY is not set (add it to api/.env)");
+  const ROWS = 100;
+  while (!state.smithsonian.done && !overBudget()) {
+    const unit = SI_UNITS[state.smithsonian.unit];
+    if (!unit) { state.smithsonian.done = true; save(); break; }
+    const q = `unit_code:${unit[0]} AND online_media_type:"Images" AND media_usage:"CC0"`;
+    const url = `https://api.si.edu/openaccess/api/v1.0/search?${new URLSearchParams({ q, start: String(state.smithsonian.start), rows: String(ROWS), api_key: key })}`;
+    const res = await getJson<any>(url, 4);
+    const rows: any[] = res.response?.rows ?? [];
+    const out: Artwork[] = [];
+    for (const r of rows) {
+      const c = r.content ?? {};
+      const media = arr(c.descriptiveNonRepeating?.online_media?.media).find((m: any) => m.type === "Images" && m.usage?.access === "CC0" && m.idsId);
+      const title = r.title as string | undefined;
+      if (!media || !title) continue;
+      const names = arr(c.freetext?.name);
+      const artist = (names.find((n: any) => /artist|maker|painter|creator|sculptor|photographer/i.test(n.label ?? "")) ?? names[0])?.content as string | undefined;
+      const jpg = arr(media.resources).find((x: any) => /high-resolution jpeg/i.test(x.label ?? ""))?.url as string | undefined;
+      out.push({
+        id: `smithsonian:${r.id}`, source: "smithsonian", sourceId: String(r.id), title, artist: artist?.split(",")[0]?.trim() || "Unknown",
+        originalImageUrl: jpg ?? `https://ids.si.edu/ids/deliveryService?id=${media.idsId}`,
+        thumbnailUrl: `https://ids.si.edu/ids/deliveryService?id=${media.idsId}&max=600`,
+        width: media.width ? Number(media.width) : undefined, height: media.height ? Number(media.height) : undefined,
+        year: arr(c.freetext?.date)[0]?.content || undefined, creditLine: arr(c.freetext?.creditLine)[0]?.content || undefined,
+        isPublicDomain: true, sourceMuseum: unit[1], license: "CC0",
+        sourceUrl: c.descriptiveNonRepeating?.record_link ?? `https://www.si.edu/object/${r.id}`,
+      });
+    }
+    await flush(out);
+    state.smithsonian.start += ROWS;
+    if (rows.length < ROWS) { state.smithsonian.unit++; state.smithsonian.start = 0; }
+    save();
+    log(`[smithsonian] ${unit[0]} start=${state.smithsonian.start} total=${state.total}`);
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
+const jobs: Record<MuseumSource, () => Promise<void>> = { cleveland, aic, met, smk, nga, rijks, smithsonian };
 for (const s of sources) {
   if (overBudget()) break;
   log(`start ${s} (budget ${state.total}/${budget})`);

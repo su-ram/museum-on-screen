@@ -26,7 +26,7 @@ export interface Artwork {
 /** Museums with a search client (used by `ingest`, `smoke`). */
 export type ClientSource = "met" | "cleveland" | "aic";
 /** Every museum we store; smk/nga are ingested in bulk only (see ingest-all.ts). */
-export type MuseumSource = ClientSource | "smk" | "nga" | "rijks";
+export type MuseumSource = ClientSource | "smk" | "nga" | "rijks" | "smithsonian";
 
 export interface SearchOptions {
   query: string;
