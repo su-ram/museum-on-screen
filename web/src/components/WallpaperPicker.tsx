@@ -2,6 +2,7 @@
 
 import { LoadingImage } from "@/components/LoadingImage";
 import { useMemo, useState } from "react";
+import { DownloadLink } from "@/components/DownloadLink";
 import { canMake, DEVICES, FIT_BACKGROUND, MODES, type DeviceType, type FitMode } from "@/lib/devices";
 import type { Wallpaper } from "@/lib/queries";
 
@@ -108,9 +109,13 @@ export function WallpaperPicker({ wallpapers, title, original, artworkId, childr
         ) : (
           (current || makeable(device, effectiveMode)) && (
             <div className="max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-40 max-lg:border-t max-lg:border-line max-lg:bg-bg/95 max-lg:px-5 max-lg:py-3 max-lg:backdrop-blur">
-              <a href={current ? `/api/wallpapers/${current.id}/download` : `/api/artworks/${artworkId}/wallpaper?device=${device}&mode=${effectiveMode}`} className="flex h-10 items-center justify-center rounded-none bg-ink px-4 text-sm font-medium text-bg transition-colors hover:bg-accent hover:text-[#06231a]">
+              <DownloadLink
+                href={current ? `/api/wallpapers/${current.id}/download` : `/api/artworks/${artworkId}/wallpaper?device=${device}&mode=${effectiveMode}`}
+                busyLabel="월페이퍼 만드는 중… 최대 1분 걸릴 수 있어요"
+                className="flex h-10 items-center justify-center rounded-none bg-ink px-4 text-sm font-medium text-bg transition-colors hover:bg-accent hover:text-[#06231a]"
+              >
                 다운로드 · JPG{current?.file_size ? ` · ${(current.file_size / 1048576).toFixed(1)}MB` : ""}
-              </a>
+              </DownloadLink>
               {!current && <p className="mt-2 text-xs text-muted">다운로드할 때 만들어져서 몇 초 걸릴 수 있어요.</p>}
             </div>
           )

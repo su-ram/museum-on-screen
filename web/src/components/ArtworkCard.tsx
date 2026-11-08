@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DownloadLink } from "@/components/DownloadLink";
 import { LoadingImage } from "@/components/LoadingImage";
 import { canMake, DEVICES, MUSEUMS } from "@/lib/devices";
 import { coverOf, type Artwork } from "@/lib/queries";
@@ -40,7 +41,7 @@ export function ArtworkCard({ artwork: a }: { artwork: Artwork }) {
       <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
         {downloads.map(({ d, href }) => (
           <li key={d.type}>
-            <a href={href} className="inline-block py-1 underline underline-offset-4 decoration-line hover:decoration-accent">{d.label}</a>
+            <DownloadLink href={href} busyLabel={`${d.label} 만드는 중…`} className="inline-block py-1 underline underline-offset-4 decoration-line hover:decoration-accent">{d.label}</DownloadLink>
           </li>
         ))}
       </ul>

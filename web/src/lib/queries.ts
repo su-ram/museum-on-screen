@@ -50,13 +50,17 @@ export async function listArtworks(opts: { q?: string; museum?: string; page?: n
     .select(`${COLS}, wallpapers(${WP})`, { count: "exact" })
     .eq("is_public_domain", true)
     .not("museum", "in", `(${HIDDEN_MUSEUMS.join(",")})`)
-    .order("artist")
-    .order("title")
+    // Random-looking but stable order: ids are random v4 UUIDs, so museums and artists come out mixed
+    // (instead of A–Z by artist, where one name can fill a whole page) and paging stays consistent.
+    .order("id")
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (opts.museum) query = query.eq("museum", opts.museum);
   const q = opts.q?.trim().replace(/[,()%*\\]/g, " ");
   if (q) query = query.or(`title.ilike.%${q}%,artist.ilike.%${q}%`);
-  const { data, error, count } = await query;
+  // The DB can hit its statement timeout while bulk ingests are writing; one retry smooths that over.
+  let res = await query;
+  if (res.error && /timeout/i.test(res.error.message)) res = await query;
+  const { data, error, count } = res;
   if (error) throw new Error(error.message);
   return { artworks: ((data ?? []) as unknown as Raw[]).map(hydrate), total: count ?? 0, page };
 }
