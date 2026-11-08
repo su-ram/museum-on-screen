@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { RequestForm } from "@/components/RequestForm";
-import { MUSEUMS } from "@/lib/devices";
+import { VISIBLE_MUSEUMS } from "@/lib/devices";
 
 export const metadata: Metadata = { title: "소개" };
 
@@ -39,7 +39,7 @@ export default function AboutPage() {
         모든 작품은 각 미술관이 CC0 또는 퍼블릭 도메인으로 공개한 이미지예요. 작품 페이지마다 미술관, 크레딧, 원본 출처 링크를 함께 보여줘요.
       </p>
       <ul className="mt-3 text-sm text-muted">
-        {Object.values(MUSEUMS).map((m) => <li key={m}>· {m}</li>)}
+        {VISIBLE_MUSEUMS.map(([k, m]) => <li key={k}>· {m}</li>)}
       </ul>
 
       <Link href="/#gallery" className="mt-12 inline-flex h-10 items-center rounded-none bg-ink px-4 text-sm font-medium text-bg transition-colors hover:bg-accent hover:text-[#06231a]">

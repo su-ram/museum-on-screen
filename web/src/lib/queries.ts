@@ -1,5 +1,5 @@
 import { db, wallpaperUrl } from "./supabase";
-import type { DeviceType, FitMode } from "./devices";
+import { HIDDEN_MUSEUMS, type DeviceType, type FitMode } from "./devices";
 
 export interface Wallpaper {
   id: string;
@@ -49,6 +49,7 @@ export async function listArtworks(opts: { q?: string; museum?: string; page?: n
     .from("artworks")
     .select(`${COLS}, wallpapers(${WP})`, { count: "exact" })
     .eq("is_public_domain", true)
+    .not("museum", "in", `(${HIDDEN_MUSEUMS.join(",")})`)
     .order("artist")
     .order("title")
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
@@ -69,7 +70,7 @@ export async function getArtwork(id: string): Promise<Artwork | null> {
     .eq("is_public_domain", true)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? hydrate(data as unknown as Raw) : null;
+  return data && !HIDDEN_MUSEUMS.includes(data.museum) ? hydrate(data as unknown as Raw) : null;
 }
 
 export async function getWallpaper(id: string) {

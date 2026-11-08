@@ -1,4 +1,4 @@
-import { MUSEUMS } from "@/lib/devices";
+import { VISIBLE_MUSEUMS } from "@/lib/devices";
 
 export function Footer() {
   return (
@@ -10,7 +10,7 @@ export function Footer() {
         </div>
         <div className="text-sm leading-relaxed text-muted md:text-right">
           <p>모든 작품은 CC0 또는 퍼블릭 도메인으로 공개된 이미지이며, 각 작품 페이지에 출처와 크레딧을 표시합니다.</p>
-          <p className="mt-2">{["The Metropolitan Museum of Art", "Cleveland Museum of Art", "Art Institute of Chicago", ...Object.entries(MUSEUMS).filter(([k]) => !["met", "cleveland", "aic"].includes(k)).map(([, v]) => v)].join(" · ")}</p>
+          <p className="mt-2">{VISIBLE_MUSEUMS.map(([, v]) => v).join(" · ")}</p>
         </div>
       </div>
     </footer>

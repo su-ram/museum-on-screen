@@ -13,6 +13,12 @@ export const MODES: { type: FitMode; label: string; hint: string }[] = [
   { type: "fit", label: "Fit", hint: "작품 전체 보기 (여백 포함)" },
 ];
 
+/**
+ * Museums kept in the DB but not shown. The Art Institute of Chicago's image server blocks our
+ * requests (403) and its images don't load in visitors' browsers either; remove "aic" here to bring it back.
+ */
+export const HIDDEN_MUSEUMS = ["aic"];
+
 export const MUSEUMS: Record<string, string> = {
   met: "The Met",
   cleveland: "Cleveland Museum of Art",
@@ -37,3 +43,6 @@ export function canMake(src: { width: number | null; height: number | null }, de
   if (!src.width || !src.height) return true;
   return requiredScale({ width: src.width, height: src.height }, device, mode) <= 1;
 }
+
+/** Museums shown in the filter, footer and About page. */
+export const VISIBLE_MUSEUMS = Object.entries(MUSEUMS).filter(([k]) => !HIDDEN_MUSEUMS.includes(k));
