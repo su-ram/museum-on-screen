@@ -7,7 +7,7 @@
  *   npm run ingest:all -- --museum cleveland --museum aic
  *   npm run ingest:all -- --reset                  # forget saved progress
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { upsertArtworks } from "./db.js";
 import { getJson, mapLimit } from "./http.js";
 import type { Artwork, MuseumSource } from "./types.js";
@@ -16,10 +16,10 @@ const argv = process.argv.slice(2);
 const flag = (n: string) => argv.flatMap((a, i) => (a === `--${n}` && argv[i + 1] ? [argv[i + 1]!] : []));
 const budget = Number(flag("budget")[0] ?? 150_000);
 const sources = (flag("museum").length ? flag("museum") : ["cleveland", "aic", "met"]) as MuseumSource[];
-const STATE = "data/ingest-state.json";
+const STATE = flag("state")[0] ?? "data/ingest-state.json";
 
-interface State { cleveland: { skip: number; done: boolean }; aic: { page: number; done: boolean }; met: { ids: number[] | null; idx: number; done: boolean }; total: number }
-const fresh = (): State => ({ cleveland: { skip: 0, done: false }, aic: { page: 1, done: false }, met: { ids: null, idx: 0, done: false }, total: 0 });
+interface State { smk: { offset: number; done: boolean }; nga: { done: boolean }; cleveland: { skip: number; done: boolean }; aic: { page: number; done: boolean }; met: { ids: number[] | null; idx: number; done: boolean }; total: number }
+const fresh = (): State => ({ smk: { offset: 0, done: false }, nga: { done: false }, cleveland: { skip: 0, done: false }, aic: { page: 1, done: false }, met: { ids: null, idx: 0, done: false }, total: 0 });
 mkdirSync("data", { recursive: true });
 const state: State = argv.includes("--reset") || !existsSync(STATE) ? fresh() : { ...fresh(), ...JSON.parse(readFileSync(STATE, "utf8")) };
 const save = () => writeFileSync(STATE, JSON.stringify(state));
@@ -135,7 +135,111 @@ async function met() {
   }
 }
 
-const jobs: Record<MuseumSource, () => Promise<void>> = { cleveland, aic, met };
+
+// ---- SMK (Denmark): ~39k public-domain works with images ----------------------------------
+interface SmkItem {
+  object_number: string; titles?: { title: string }[]; production?: { creator?: string; creator_forename?: string; creator_surname?: string }[];
+  production_date?: { period?: string }[]; image_iiif_id?: string; image_width?: number; image_height?: number;
+  public_domain?: boolean; rights?: string; frontend_url?: string; credit_line?: string | null; has_image?: boolean;
+}
+const SMK_MAX = 2560; // SMK's IIIF server is slow on big sizes (30-80s); cap the longest side
+
+async function smk() {
+  const ROWS = 100;
+  while (!state.smk.done && !overBudget()) {
+    const url = `https://api.smk.dk/api/v1/art/search/?keys=*&filters=${encodeURIComponent("[public_domain:true],[has_image:true]")}&offset=${state.smk.offset}&rows=${ROWS}&lang=en`;
+    const { items } = await getJson<{ items: SmkItem[] }>(url, 4);
+    const out: Artwork[] = [];
+    for (const a of items) {
+      if (!a.public_domain || !a.image_iiif_id) continue;
+      const c = a.production?.[0];
+      const artist = c?.creator_forename && c?.creator_surname ? `${c.creator_forename} ${c.creator_surname}` : c?.creator?.split(",").reverse().map((x) => x.trim()).join(" ") || "Unknown";
+      const w = a.image_width, h = a.image_height;
+      const k = w && h ? Math.min(1, SMK_MAX / Math.max(w, h)) : 1;
+      out.push({
+        id: `smk:${a.object_number}`, source: "smk", sourceId: a.object_number,
+        title: a.titles?.[0]?.title || a.object_number, artist,
+        originalImageUrl: `${a.image_iiif_id}/full/!${SMK_MAX},${SMK_MAX}/0/default.jpg`,
+        thumbnailUrl: `${a.image_iiif_id.replace("//iip.", "//iip-thumb.")}/full/!600,600/0/default.jpg`,
+        width: w ? Math.round(w * k) : undefined, height: h ? Math.round(h * k) : undefined,
+        year: a.production_date?.[0]?.period || undefined, creditLine: a.credit_line || undefined,
+        isPublicDomain: true, sourceMuseum: "SMK — National Gallery of Denmark", license: "Public Domain",
+        sourceUrl: a.frontend_url ?? `https://open.smk.dk/artwork/image/${a.object_number}`,
+      });
+    }
+    await flush(out);
+    state.smk.offset += ROWS;
+    if (items.length < ROWS) state.smk.done = true;
+    save();
+    if ((state.smk.offset / ROWS) % 10 === 0) log(`[smk] offset=${state.smk.offset} total=${state.total}`);
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
+
+// ---- NGA (USA): open-data CSVs on GitHub; only images flagged openaccess=1 ------------------
+function* csvRows(text: string): Generator<string[]> {
+  let row: string[] = [], field = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; } else field += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); field = ""; yield row; row = []; }
+    else if (c !== "\r") field += c;
+  }
+  if (field || row.length) { row.push(field); yield row; }
+}
+
+async function cached(url: string, file: string): Promise<string> {
+  mkdirSync("data/cache", { recursive: true });
+  const path = `data/cache/${file}`;
+  if (!existsSync(path) || statSync(path).size < 1000) {
+    log(`[nga] downloading ${file}`);
+    const res = await fetch(url, { headers: { "User-Agent": "museum-on-screen/0.1" } });
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    writeFileSync(path, Buffer.from(await res.arrayBuffer()));
+  }
+  return readFileSync(path, "utf8");
+}
+
+async function nga() {
+  if (state.nga.done) return;
+  const B = "https://raw.githubusercontent.com/NationalGalleryOfArt/opendata/main/data";
+  const img = new Map<string, { iiif: string; w: number; h: number; seq: number }>();
+  let head: string[] | null = null;
+  for (const r of csvRows(await cached(`${B}/published_images.csv`, "nga_images.csv"))) {
+    if (!head) { head = r; continue; }
+    const get = (n: string) => r[head!.indexOf(n)] ?? "";
+    if (get("openaccess") !== "1" || get("viewtype") !== "primary") continue;
+    const id = get("depictstmsobjectid"), seq = Number(get("sequence")) || 0;
+    const prev = img.get(id);
+    if (!prev || seq < prev.seq) img.set(id, { iiif: get("iiifurl"), w: Number(get("width")) || 0, h: Number(get("height")) || 0, seq });
+  }
+  log(`[nga] ${img.size} open-access primary images`);
+  const batch: Artwork[] = [];
+  head = null;
+  for (const r of csvRows(await cached(`${B}/objects.csv`, "nga_objects.csv"))) {
+    if (!head) { head = r; continue; }
+    const get = (n: string) => r[head!.indexOf(n)] ?? "";
+    const id = get("objectid"), im = img.get(id);
+    if (!im || !get("title")) continue;
+    batch.push({
+      id: `nga:${id}`, source: "nga", sourceId: id, title: get("title"), artist: get("attribution") || "Unknown",
+      originalImageUrl: `${im.iiif}/full/full/0/default.jpg`, thumbnailUrl: `${im.iiif}/full/!600,600/0/default.jpg`,
+      width: im.w || undefined, height: im.h || undefined, year: get("displaydate") || undefined, creditLine: get("creditline") || undefined,
+      isPublicDomain: true, sourceMuseum: "National Gallery of Art", license: "CC0", sourceUrl: `https://www.nga.gov/artworks/${id}`,
+    });
+  }
+  for (let i = 0; i < batch.length && !overBudget(); i += 500) {
+    await flush(batch.slice(i, i + 500));
+    save();
+    if ((i / 500) % 10 === 0) log(`[nga] ${i}/${batch.length} total=${state.total}`);
+  }
+  if (!overBudget()) { state.nga.done = true; save(); }
+}
+
+const jobs: Record<MuseumSource, () => Promise<void>> = { cleveland, aic, met, smk, nga };
 for (const s of sources) {
   if (overBudget()) break;
   log(`start ${s} (budget ${state.total}/${budget})`);

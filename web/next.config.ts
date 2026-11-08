@@ -11,6 +11,9 @@ const config: NextConfig = {
       { protocol: "https", hostname: "openaccess-cdn.clevelandart.org" },
       { protocol: "https", hostname: "images.metmuseum.org" },
       { protocol: "https", hostname: "www.artic.edu" },
+      { protocol: "https", hostname: "api.nga.gov" },
+      { protocol: "https", hostname: "iip.smk.dk" },
+      { protocol: "https", hostname: "iip-thumb.smk.dk" },
     ],
   },
 };

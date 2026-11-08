@@ -23,7 +23,10 @@ export interface Artwork {
   sourceUrl: string;
 }
 
-export type MuseumSource = "met" | "cleveland" | "aic";
+/** Museums with a search client (used by `ingest`, `smoke`). */
+export type ClientSource = "met" | "cleveland" | "aic";
+/** Every museum we store; smk/nga are ingested in bulk only (see ingest-all.ts). */
+export type MuseumSource = ClientSource | "smk" | "nga";
 
 export interface SearchOptions {
   query: string;
@@ -34,6 +37,6 @@ export interface SearchOptions {
 }
 
 export interface MuseumClient {
-  readonly source: MuseumSource;
+  readonly source: ClientSource;
   search(opts: SearchOptions): Promise<Artwork[]>;
 }

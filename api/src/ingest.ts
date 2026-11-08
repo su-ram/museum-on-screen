@@ -7,7 +7,7 @@
  * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (not needed with --dry-run)
  */
 import { upsertArtworks } from "./db.js";
-import { clients, type Artwork, type MuseumSource } from "./index.js";
+import { clients, type Artwork, type ClientSource } from "./index.js";
 
 function args(name: string): string[] {
   const out: string[] = [];
@@ -18,7 +18,7 @@ function args(name: string): string[] {
 const dryRun = process.argv.includes("--dry-run");
 const perMuseum = Number(args("per-museum")[0] ?? 7);
 const queries = args("query").length ? args("query") : ["monet", "van gogh", "landscape", "flowers"];
-const sources = (args("museum").length ? args("museum") : ["cleveland", "aic", "met"]) as MuseumSource[];
+const sources = (args("museum").length ? args("museum") : ["cleveland", "aic", "met"]) as ClientSource[];
 
 const collected = new Map<string, Artwork>();
 for (const source of sources) {
