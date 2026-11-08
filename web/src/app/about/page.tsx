@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { RequestForm } from "@/components/RequestForm";
 import { MUSEUMS } from "@/lib/devices";
 
 export const metadata: Metadata = { title: "소개" };
@@ -44,6 +45,11 @@ export default function AboutPage() {
       <Link href="/#gallery" className="mt-12 inline-flex h-10 items-center rounded-none bg-ink px-4 text-sm font-medium text-bg transition-colors hover:bg-accent hover:text-[#06231a]">
         갤러리 보기
       </Link>
+
+      <h2 className="mt-20 text-sm font-medium text-muted">Submit a request</h2>
+      <div className="mt-4">
+        <RequestForm />
+      </div>
     </div>
   );
 }

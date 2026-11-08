@@ -1,7 +1,7 @@
 export function Footer() {
   return (
     <footer className="mt-24 border-t border-line">
-      <div className="mx-auto grid max-w-[1400px] gap-8 px-5 py-12 sm:px-8 md:grid-cols-2">
+      <div className="mx-auto grid max-w-[1400px] gap-8 px-5 py-24 sm:px-8 sm:py-36 md:grid-cols-2 md:items-end">
         <div>
           <p className="font-serif text-3xl leading-tight">Bring the museum<br />to your screen.</p>
           <p className="mt-3 text-sm text-muted">미술관을 내 화면 속으로.</p>
