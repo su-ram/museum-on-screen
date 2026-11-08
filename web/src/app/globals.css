@@ -94,11 +94,18 @@ body {
   .glare::after { transition: opacity 200ms ease; background-position: 50% 0; }
 }
 
-/* Loading dots: big hop with squash & stretch, staggered per dot. */
-@keyframes dot-wave {
-  0%, 60%, 100% { transform: translateY(0) scale(1, 1); opacity: 0.5; }
-  30% { transform: translateY(-22px) scale(0.9, 1.15); opacity: 1; }
-  50% { transform: translateY(0) scale(1.25, 0.8); opacity: 1; }
+/* Loading placeholder: the same glass highlight as .glare, sweeping across on a loop. */
+@keyframes glare-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
 }
-.dot-wave { animation: dot-wave 1s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .dot-wave { animation: none; } }
+.glare-loop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.28) 46%, rgb(255 255 255 / 0.10) 54%, transparent 65%);
+  background-size: 300% 100%;
+  animation: glare-sweep 1.8s cubic-bezier(.2,.7,.2,1) infinite;
+}
+@media (prefers-reduced-motion: reduce) { .glare-loop::after { animation: none; opacity: 0; } }

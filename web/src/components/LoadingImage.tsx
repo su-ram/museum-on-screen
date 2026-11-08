@@ -18,11 +18,7 @@ export function LoadingImage({ className = "", onLoad, onError, ...props }: Omit
   return (
     <>
       {state === "loading" && (
-        <div aria-hidden className="absolute inset-0 flex animate-pulse items-center justify-center gap-2 bg-line">
-          {[0, 1, 2, 3].map((i) => (
-            <span key={i} className="dot-wave h-2 w-2 rounded-full bg-ink" style={{ animationDelay: `${i * 140}ms` }} />
-          ))}
-        </div>
+        <div aria-hidden className="glare-loop absolute inset-0 bg-line" />
       )}
       {state === "error" && (
         <div className="absolute inset-0 flex items-center justify-center bg-line text-xs text-muted">이미지를 불러오지 못했어요</div>
