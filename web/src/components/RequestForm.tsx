@@ -14,7 +14,6 @@ const field = "w-full rounded-none border border-line bg-surface px-3 py-2 text-
 export function RequestForm() {
   const [state, setState] = useState<"idle" | "sending" | "done">("idle");
   const [error, setError] = useState("");
-  const [issue, setIssue] = useState<{ url: string; number: number } | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -30,7 +29,6 @@ export function RequestForm() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? "요청을 보내지 못했어요.");
-      setIssue(json.url ? { url: json.url, number: json.number } : null);
       setState("done");
       form.reset();
     } catch (err) {
@@ -43,11 +41,6 @@ export function RequestForm() {
     return (
       <div className="border border-line p-6">
         <p className="text-base font-medium">요청이 접수됐어요. 고마워요!</p>
-        {issue && (
-          <p className="mt-2 text-sm text-muted">
-            <a href={issue.url} target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:decoration-accent">GitHub 이슈 #{issue.number} ↗</a>에서 진행 상황을 볼 수 있어요.
-          </p>
-        )}
         <button onClick={() => setState("idle")} className="mt-4 text-sm text-muted underline underline-offset-4 hover:text-ink">다른 요청 보내기</button>
       </div>
     );

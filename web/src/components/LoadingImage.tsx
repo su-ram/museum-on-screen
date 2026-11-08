@@ -7,7 +7,11 @@ import { useCallback, useState } from "react";
  * next/image that shows a pulsing placeholder + spinner until the image has loaded,
  * then fades the image in. Must be rendered inside a `relative` container (uses `fill`).
  */
-export function LoadingImage({ className = "", onLoad, onError, ...props }: Omit<ImageProps, "fill">) {
+// The Art Institute of Chicago's image server answers 403 to our server-side requests (bot protection),
+// so its images skip Next's optimizer and are loaded straight from the visitor's browser.
+const BROWSER_ONLY = /^https:\/\/www\.artic\.edu\//;
+
+export function LoadingImage({ className = "", onLoad, onError, unoptimized, ...props }: Omit<ImageProps, "fill">) {
   const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
 
   // Images already in the browser cache can finish before hydration, so onLoad never fires.
@@ -25,6 +29,7 @@ export function LoadingImage({ className = "", onLoad, onError, ...props }: Omit
       )}
       <Image
         {...props}
+        unoptimized={unoptimized ?? (typeof props.src === "string" && BROWSER_ONLY.test(props.src))}
         ref={ref}
         fill
         onLoad={(e) => { setState("loaded"); onLoad?.(e); }}
