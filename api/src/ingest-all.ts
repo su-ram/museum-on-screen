@@ -6,6 +6,7 @@
  *   npm run ingest:all -- --budget 150000          # stop after ~150k rows (DB size guard)
  *   npm run ingest:all -- --museum cleveland --museum aic
  *   npm run ingest:all -- --reset                  # forget saved progress
+ *   npm run ingest:all -- --museum rijks --rijks-type painting --dry-run --budget 100   # parse only, no DB write
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { upsertArtworks } from "./db.js";
@@ -18,8 +19,8 @@ const budget = Number(flag("budget")[0] ?? 150_000);
 const sources = (flag("museum").length ? flag("museum") : ["cleveland", "aic", "met"]) as MuseumSource[];
 const STATE = flag("state")[0] ?? "data/ingest-state.json";
 
-interface State { smk: { offset: number; done: boolean }; nga: { done: boolean }; cleveland: { skip: number; done: boolean }; aic: { page: number; done: boolean }; met: { ids: number[] | null; idx: number; done: boolean }; total: number }
-const fresh = (): State => ({ smk: { offset: 0, done: false }, nga: { done: false }, cleveland: { skip: 0, done: false }, aic: { page: 1, done: false }, met: { ids: null, idx: 0, done: false }, total: 0 });
+interface State { rijks: { next: string | null; done: boolean }; smk: { offset: number; done: boolean }; nga: { done: boolean }; cleveland: { skip: number; done: boolean }; aic: { page: number; done: boolean }; met: { ids: number[] | null; idx: number; done: boolean }; total: number }
+const fresh = (): State => ({ rijks: { next: null, done: false }, smk: { offset: 0, done: false }, nga: { done: false }, cleveland: { skip: 0, done: false }, aic: { page: 1, done: false }, met: { ids: null, idx: 0, done: false }, total: 0 });
 mkdirSync("data", { recursive: true });
 const state: State = argv.includes("--reset") || !existsSync(STATE) ? fresh() : { ...fresh(), ...JSON.parse(readFileSync(STATE, "utf8")) };
 const save = () => writeFileSync(STATE, JSON.stringify(state));
@@ -28,6 +29,7 @@ const log = (m: string) => console.log(`${new Date().toISOString()} ${m}`);
 async function flush(list: Artwork[]) {
   const uniq = [...new Map(list.map((a) => [a.id, a])).values()];
   if (!uniq.length) return;
+  if (argv.includes("--dry-run")) { for (const a of uniq.slice(0, 3)) console.log(JSON.stringify(a)); state.total += uniq.length; return; }
   for (let attempt = 0; ; attempt++) {
     try { await upsertArtworks(uniq); break; }
     catch (e) { if (attempt >= 4) throw e; log(`upsert retry: ${(e as Error).message}`); await new Promise((r) => setTimeout(r, 3000 * (attempt + 1))); }
@@ -239,7 +241,58 @@ async function nga() {
   if (!overBudget()) { state.nga.done = true; save(); }
 }
 
-const jobs: Record<MuseumSource, () => Promise<void>> = { cleveland, aic, met, smk, nga };
+// ---- Rijksmuseum (NL): Linked Art; one request per object. Default: paintings only ----------
+const rijksType = flag("rijks-type")[0] ?? "painting";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const EN = "http://vocab.getty.edu/aat/300388277";
+const arr = (x: any): any[] => (x == null ? [] : Array.isArray(x) ? x : [x]);
+const isEn = (n: any) => arr(n.language).some((l: any) => l.id === EN);
+
+function rijksArtwork(o: any): Artwork | null {
+  const objNum = arr(o.identified_by).find((i: any) => i.type === "Identifier" && arr(i.classified_as).some((c: any) => arr(c.notation).some((n: any) => n["@value"] === "object number")))?.content as string | undefined;
+  const names = arr(o.identified_by).filter((i: any) => i.type === "Name");
+  const title = (names.find((n: any) => isEn(n) && arr(n.classified_as).some((c: any) => String(c.id).endsWith("300404670"))) ?? names.find(isEn) ?? names[0])?.content as string | undefined;
+  let image: string | undefined, publicDomain = false;
+  for (const s of arr(o.subject_of)) for (const d of arr(s.digitally_carried_by)) {
+    const url = arr(d.access_point)[0]?.id as string | undefined;
+    if (url?.startsWith("https://iiif.micr.io/")) {
+      image = url;
+      publicDomain = arr(d.referred_to_by).some((r: any) => /publicdomain\/(mark|zero)/.test(r.content ?? ""));
+    }
+  }
+  if (!objNum || !title || !image || !publicDomain) return null;
+  const id = image.split("/")[3]!;
+  const artist = arr(o.produced_by?.part).flatMap((p: any) => arr(p.carried_out_by)).map((c: any) => arr(c.notation).find((n: any) => n["@language"] === "en")?.["@value"]).find(Boolean) as string | undefined;
+  const year = arr(o.produced_by?.timespan?.identified_by).find(isEn)?.content as string | undefined;
+  return {
+    id: `rijks:${objNum}`, source: "rijks", sourceId: objNum, title, artist: artist || "Unknown",
+    originalImageUrl: `https://iiif.micr.io/${id}/full/max/0/default.jpg`,
+    thumbnailUrl: `https://iiif.micr.io/${id}/full/!600,600/0/default.jpg`,
+    year, isPublicDomain: true, sourceMuseum: "Rijksmuseum", license: "Public Domain",
+    sourceUrl: `https://www.rijksmuseum.nl/en/collection/${objNum}`,
+  };
+}
+
+async function rijks() {
+  let url = state.rijks.next ?? `https://data.rijksmuseum.nl/search/collection?imageAvailable=true&type=${encodeURIComponent(rijksType)}`;
+  while (!state.rijks.done && !overBudget()) {
+    const page = await getJson<any>(url, 4);
+    const ids: string[] = (page.orderedItems ?? []).map((i: any) => i.id);
+    const objs = await mapLimit(ids, 5, async (id) => {
+      try {
+        const res = await fetch(id, { headers: { Accept: "application/ld+json", "User-Agent": "museum-on-screen/0.1" } });
+        return res.ok ? await res.json() : null;
+      } catch { return null; }
+    });
+    await flush(objs.map((o) => (o ? rijksArtwork(o) : null)).filter((a): a is Artwork => !!a));
+    const next = page.next?.id as string | undefined;
+    if (!next || !ids.length) state.rijks.done = true; else { url = next; state.rijks.next = next; }
+    save();
+    log(`[rijks] total=${state.total}${state.rijks.done ? " (done)" : ""}`);
+  }
+}
+
+const jobs: Record<MuseumSource, () => Promise<void>> = { cleveland, aic, met, smk, nga, rijks };
 for (const s of sources) {
   if (overBudget()) break;
   log(`start ${s} (budget ${state.total}/${budget})`);

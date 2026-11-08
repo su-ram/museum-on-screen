@@ -25,6 +25,7 @@ export const MUSEUMS: Record<string, string> = {
   aic: "Art Institute of Chicago",
   smk: "SMK — National Gallery of Denmark",
   nga: "National Gallery of Art",
+  rijks: "Rijksmuseum",
 };
 
 export const FIT_BACKGROUND = "#171717";

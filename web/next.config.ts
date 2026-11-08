@@ -13,6 +13,7 @@ const config: NextConfig = {
       { protocol: "https", hostname: "www.artic.edu" },
       { protocol: "https", hostname: "api.nga.gov" },
       { protocol: "https", hostname: "iip.smk.dk" },
+      { protocol: "https", hostname: "iiif.micr.io" },
       { protocol: "https", hostname: "iip-thumb.smk.dk" },
     ],
   },
