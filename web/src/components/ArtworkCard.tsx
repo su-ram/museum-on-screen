@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { LoadingImage } from "@/components/LoadingImage";
 import { DEVICES, MUSEUMS } from "@/lib/devices";
 import { coverOf, type Artwork } from "@/lib/queries";
 
@@ -15,10 +15,9 @@ export function ArtworkCard({ artwork: a }: { artwork: Artwork }) {
       <Link href={`/artworks/${a.id}`} className="glare relative block overflow-hidden rounded-none bg-line">
         <div className="relative aspect-[4/3]">
           {cover && (
-            <Image
+            <LoadingImage
               src={cover.url}
               alt={`${a.title} — ${a.artist}`}
-              fill
               sizes="(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw"
               className="object-cover"
             />

@@ -40,7 +40,7 @@ const hydrate = (r: Raw): Artwork => ({
   wallpapers: r.wallpapers.map((w) => ({ ...w, url: wallpaperUrl(w.storage_path) })),
 });
 
-export const PAGE_SIZE = 24;
+export const PAGE_SIZE = 100; // 4열 × 25행
 
 /** Artworks that have at least one generated wallpaper. Never calls the museum APIs. */
 export async function listArtworks(opts: { q?: string; museum?: string; page?: number } = {}) {

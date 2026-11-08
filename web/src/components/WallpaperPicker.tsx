@@ -1,30 +1,14 @@
 "use client";
 
-import Image from "next/image";
+import { LoadingImage } from "@/components/LoadingImage";
 import { useMemo, useState } from "react";
 import { DEVICES, MODES, type DeviceType, type FitMode } from "@/lib/devices";
 import type { Wallpaper } from "@/lib/queries";
 
 type DeviceChoice = DeviceType | "original";
 
-/** Image that fades in once loaded, over a light pulsing placeholder (no black box while loading). */
 function PreviewImage({ src, alt, className }: { src: string; alt: string; className: string }) {
-  const [loaded, setLoaded] = useState(false);
-  return (
-    <>
-      {!loaded && <div aria-hidden className="absolute inset-0 animate-pulse bg-line" />}
-      <Image
-        key={src}
-        src={src}
-        alt={alt}
-        fill
-        sizes="(min-width:1024px) 720px, 100vw"
-        priority
-        onLoad={() => setLoaded(true)}
-        className={`${className} transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
-      />
-    </>
-  );
+  return <LoadingImage key={src} src={src} alt={alt} sizes="(min-width:1024px) 720px, 100vw" priority className={className} />;
 }
 export interface OriginalImage { url: string; width: number | null; height: number | null }
 
