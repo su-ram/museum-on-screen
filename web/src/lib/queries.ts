@@ -42,12 +42,12 @@ const hydrate = (r: Raw): Artwork => ({
 
 export const PAGE_SIZE = 100; // 4열 × 25행
 
-/** Artworks that have at least one generated wallpaper. Never calls the museum APIs. */
+/** All public-domain artworks in the DB (wallpapers may or may not be pre-generated). Never calls the museum APIs. */
 export async function listArtworks(opts: { q?: string; museum?: string; page?: number } = {}) {
   const page = Math.max(1, opts.page ?? 1);
   let query = db()
     .from("artworks")
-    .select(`${COLS}, wallpapers!inner(${WP})`, { count: "exact" })
+    .select(`${COLS}, wallpapers(${WP})`, { count: "exact" })
     .eq("is_public_domain", true)
     .order("artist")
     .order("title")

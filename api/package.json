@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "smoke": "tsx src/smoke.ts",
     "ingest": "node --env-file-if-exists=.env --import tsx src/ingest.ts",
+    "ingest:all": "node --env-file-if-exists=.env --import tsx src/ingest-all.ts",
     "process": "node --env-file-if-exists=.env --import tsx src/pipeline.ts"
   },
   "devDependencies": {

@@ -18,3 +18,20 @@ export const MUSEUMS: Record<string, string> = {
   cleveland: "Cleveland Museum of Art",
   aic: "Art Institute of Chicago",
 };
+
+export const FIT_BACKGROUND = "#171717";
+export const JPEG_QUALITY = 95;
+
+/** Scale needed to produce a preset from a source: fit = artwork whole, fill = covers the screen. */
+export function requiredScale(src: { width: number; height: number }, device: DeviceType, mode: FitMode): number {
+  const d = DEVICES.find((x) => x.type === device)!;
+  const rx = d.width / src.width;
+  const ry = d.height / src.height;
+  return mode === "fit" ? Math.min(rx, ry) : Math.max(rx, ry);
+}
+
+/** We never upscale. When the source size is unknown we optimistically allow it (the server re-checks). */
+export function canMake(src: { width: number | null; height: number | null }, device: DeviceType, mode: FitMode): boolean {
+  if (!src.width || !src.height) return true;
+  return requiredScale({ width: src.width, height: src.height }, device, mode) <= 1;
+}
