@@ -45,21 +45,30 @@ export const PAGE_SIZE = 100; // 4열 × 25행
 /** All public-domain artworks in the DB (wallpapers may or may not be pre-generated). Never calls the museum APIs. */
 export async function listArtworks(opts: { q?: string; museum?: string; page?: number } = {}) {
   const page = Math.max(1, opts.page ?? 1);
-  let query = db()
-    .from("artworks")
-    .select(`${COLS}, wallpapers(${WP})`, { count: "exact" })
-    .eq("is_public_domain", true)
-    .not("museum", "in", `(${HIDDEN_MUSEUMS.join(",")})`)
-    // Random-looking but stable order: ids are random v4 UUIDs, so museums and artists come out mixed
-    // (instead of A–Z by artist, where one name can fill a whole page) and paging stays consistent.
-    .order("id")
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-  if (opts.museum) query = query.eq("museum", opts.museum);
   const q = opts.q?.trim().replace(/[,()%*\\]/g, " ");
-  if (q) query = query.or(`title.ilike.%${q}%,artist.ilike.%${q}%`);
-  // The DB can hit its statement timeout while bulk ingests are writing; one retry smooths that over.
-  let res = await query;
-  if (res.error && /timeout/i.test(res.error.message)) res = await query;
+
+  const run = (count: "exact" | "planned") => {
+    let query = db()
+      .from("artworks")
+      .select(`${COLS}, wallpapers(${WP})`, { count })
+      .eq("is_public_domain", true)
+      .not("museum", "in", `(${HIDDEN_MUSEUMS.join(",")})`)
+      // Random-looking but stable order: ids are random v4 UUIDs, so museums and artists come out mixed
+      // (instead of A–Z by artist, where one name can fill a whole page) and paging stays consistent.
+      .order("id")
+      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+    if (opts.museum) query = query.eq("museum", opts.museum);
+    if (q) query = query.or(`title.ilike.%${q}%,artist.ilike.%${q}%`);
+    return query;
+  };
+
+  // The exact row count is the expensive part. If the DB hits its statement timeout (e.g. while bulk
+  // ingests are writing), retry with the planner's estimate instead of failing the whole page.
+  let res = await run("exact");
+  for (let i = 0; i < 2 && res.error && /timeout/i.test(res.error.message); i++) {
+    await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    res = await run("planned");
+  }
   const { data, error, count } = res;
   if (error) throw new Error(error.message);
   return { artworks: ((data ?? []) as unknown as Raw[]).map(hydrate), total: count ?? 0, page };

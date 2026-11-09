@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { ArtworkCard } from "@/components/ArtworkCard";
+import { RetryButton } from "@/components/RetryButton";
 import { listArtworks, PAGE_SIZE } from "@/lib/queries";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string; museum?: string; page?: string }> }) {
@@ -28,7 +29,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
         {result && <p className="mb-3 text-right text-sm text-muted">{result.total.toLocaleString()}점</p>}
 
         {!result ? (
-          <p className="mt-10 py-8 text-muted">작품을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
+          <div className="mt-10 py-8 text-muted">
+            <p>작품을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
+            <RetryButton />
+          </div>
         ) : result.artworks.length === 0 ? (
           <p className="mt-10 py-8 text-muted">조건에 맞는 작품이 없어요.</p>
         ) : (
