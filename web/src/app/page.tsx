@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { ArtworkCard } from "@/components/ArtworkCard";
+import { ShuffleButton } from "@/components/ShuffleButton";
 import { RetryButton } from "@/components/RetryButton";
 import { listArtworks, PAGE_SIZE } from "@/lib/queries";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string; museum?: string; page?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string; museum?: string; page?: string; shuffle?: string }> }) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
   let result: Awaited<ReturnType<typeof listArtworks>> | null = null;
   try {
-    result = await listArtworks({ q: sp.q, museum: sp.museum, page });
+    result = await listArtworks({ q: sp.q, museum: sp.museum, page, shuffle: Number(sp.shuffle) || undefined });
   } catch (e) {
     console.error(e);
   }
@@ -18,6 +19,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
     const n = new URLSearchParams();
     if (sp.q) n.set("q", sp.q);
     if (sp.museum) n.set("museum", sp.museum);
+    if (sp.shuffle) n.set("shuffle", sp.shuffle);
     if (p > 1) n.set("page", String(p));
     return `/?${n.toString()}#gallery`;
   };
@@ -26,7 +28,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
     <>
       <section id="gallery" className="mx-auto max-w-[1600px] scroll-mt-20 px-5 pt-5 sm:px-8 sm:pt-6">
         <h1 className="sr-only">Museum on Screen — Bring the museum to your screen. 미술관을 내 화면 속으로.</h1>
-        {result && <p className="mb-3 text-right text-sm text-muted">{result.total.toLocaleString()}점</p>}
+        {result && (
+          <div className="mb-3 flex items-center justify-end gap-3 text-sm text-muted">
+            <ShuffleButton />
+            <span>{result.total.toLocaleString()}점</span>
+          </div>
+        )}
 
         {!result ? (
           <div className="mt-10 py-8 text-muted">
