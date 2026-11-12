@@ -17,8 +17,8 @@ export function WallpaperPicker({ wallpapers, title, original, artworkId, childr
   const byKey = useMemo(() => new Map(wallpapers.map((w) => [`${w.device_type}:${w.fit_mode}`, w])), [wallpapers]);
   // A preset is available if it was pre-generated, or can be rendered on demand from the original (no upscaling).
   const makeable = (device: DeviceType, m: FitMode) => byKey.has(`${device}:${m}`) || canMake(original, device, m);
-  const firstDevice = DEVICES.find((d) => makeable(d.type, "fill") || makeable(d.type, "fit"));
-  const [choice, setChoice] = useState<DeviceChoice>(firstDevice?.type ?? "original");
+  // Default to the original image when entering an artwork page (#9).
+  const [choice, setChoice] = useState<DeviceChoice>("original");
   const isOriginal = choice === "original";
   const device: DeviceType = isOriginal ? "laptop" : choice;
   const [mode, setMode] = useState<FitMode>("fill");
