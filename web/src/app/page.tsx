@@ -29,7 +29,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
       <section id="gallery" className="mx-auto max-w-[1600px] scroll-mt-20 px-5 pt-5 sm:px-8 sm:pt-6">
         <h1 className="sr-only">Museum on Screen — Bring the museum to your screen. 미술관을 내 화면 속으로.</h1>
         {result && (
-          <div className="mb-3 flex items-center justify-end gap-3 text-sm text-muted">
+          <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted">
             <ShuffleButton />
             <span>{result.total.toLocaleString()}점</span>
           </div>
