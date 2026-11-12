@@ -1,0 +1,22 @@
+name: Claude Code
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  claude:
+    if: contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Issue to Deploy Agent 에이전트를 사용해서 이슈 #${{ github.event.issue.number }}를 처리하세요.
