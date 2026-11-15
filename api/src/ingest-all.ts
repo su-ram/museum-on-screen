@@ -19,8 +19,8 @@ const budget = Number(flag("budget")[0] ?? 150_000);
 const sources = (flag("museum").length ? flag("museum") : ["cleveland", "aic", "met"]) as MuseumSource[];
 const STATE = flag("state")[0] ?? "data/ingest-state.json";
 
-interface State { smithsonian: { unit: number; start: number; done: boolean }; rijks: { next: string | null; done: boolean }; smk: { offset: number; done: boolean }; nga: { done: boolean }; cleveland: { skip: number; done: boolean }; aic: { page: number; done: boolean }; met: { ids: number[] | null; idx: number; done: boolean }; total: number }
-const fresh = (): State => ({ smithsonian: { unit: 0, start: 0, done: false }, rijks: { next: null, done: false }, smk: { offset: 0, done: false }, nga: { done: false }, cleveland: { skip: 0, done: false }, aic: { page: 1, done: false }, met: { ids: null, idx: 0, done: false }, total: 0 });
+interface State { smithsonian: { unit: number; start: number; done: boolean }; europeana: { provider: number; cursor: string; done: boolean }; rijks: { next: string | null; done: boolean }; smk: { offset: number; done: boolean }; nga: { done: boolean }; cleveland: { skip: number; done: boolean }; aic: { page: number; done: boolean }; met: { ids: number[] | null; idx: number; done: boolean }; total: number }
+const fresh = (): State => ({ smithsonian: { unit: 0, start: 0, done: false }, europeana: { provider: 0, cursor: "*", done: false }, rijks: { next: null, done: false }, smk: { offset: 0, done: false }, nga: { done: false }, cleveland: { skip: 0, done: false }, aic: { page: 1, done: false }, met: { ids: null, idx: 0, done: false }, total: 0 });
 mkdirSync("data", { recursive: true });
 const state: State = argv.includes("--reset") || !existsSync(STATE) ? fresh() : { ...fresh(), ...JSON.parse(readFileSync(STATE, "utf8")) };
 const save = () => writeFileSync(STATE, JSON.stringify(state));
@@ -338,7 +338,46 @@ async function smithsonian() {
   }
 }
 
-const jobs: Record<MuseumSource, () => Promise<void>> = { cleveland, aic, met, smk, nga, rijks, smithsonian };
+// ---- Europeana (EU aggregator): needs EUROPEANA_API_KEY (api/.env) --------------------------
+// Curated art museums only (Rijksmuseum and SMK are ingested directly above); public-domain mark / CC0 items only.
+const EU_PROVIDERS = ["Nationalmuseum Sweden", "Finnish National Gallery", "Slovak national gallery", "Mauritshuis"];
+
+async function europeana() {
+  const key = process.env.EUROPEANA_API_KEY;
+  if (!key) throw new Error("EUROPEANA_API_KEY is not set (add it to api/.env)");
+  const ROWS = 100;
+  while (!state.europeana.done && !overBudget()) {
+    const provider = EU_PROVIDERS[state.europeana.provider];
+    if (!provider) { state.europeana.done = true; save(); break; }
+    const params = new URLSearchParams({ wskey: key, query: "what:painting OR proxy_dc_type:painting", rows: String(ROWS), cursor: state.europeana.cursor, profile: "standard", media: "true" });
+    for (const qf of ["TYPE:IMAGE", "RIGHTS:*publicdomain*", "MIME_TYPE:image/jpeg", "IMAGE_SIZE:large OR IMAGE_SIZE:extra_large", `DATA_PROVIDER:"${provider}"`]) params.append("qf", qf);
+    const res = await getJson<any>(`https://api.europeana.eu/record/v2/search.json?${params}`, 4);
+    const items: any[] = res.items ?? [];
+    const out: Artwork[] = [];
+    for (const it of items) {
+      const image = arr(it.edmIsShownBy)[0] as string | undefined;
+      const title = arr(it.title)[0] as string | undefined;
+      const rights = arr(it.rights)[0] as string | undefined;
+      if (!image || !title || !/publicdomain\/(mark|zero)/.test(rights ?? "")) continue;
+      const sourceId = String(it.id).replace(/^\//, "");
+      const preview = arr(it.edmPreview)[0] as string | undefined;
+      out.push({
+        id: `europeana:${sourceId}`, source: "europeana", sourceId, title, artist: arr(it.dcCreator).find((c: string) => !/^https?:/.test(c))?.replace(/\s*\(.*$/, "").trim() || "Unknown",
+        originalImageUrl: image.replace(/^http:/, "https:"), thumbnailUrl: preview ? `${preview}&size=w400` : undefined,
+        year: arr(it.year)[0] || undefined, isPublicDomain: true, sourceMuseum: arr(it.dataProvider)[0] ?? provider,
+        license: rights!.includes("zero") ? "CC0" : "Public Domain",
+        sourceUrl: `https://www.europeana.eu/item/${sourceId}`,
+      });
+    }
+    await flush(out);
+    if (!res.nextCursor || !items.length) { state.europeana.provider++; state.europeana.cursor = "*"; } else state.europeana.cursor = res.nextCursor;
+    save();
+    log(`[europeana] ${provider} total=${state.total}`);
+    await new Promise((r) => setTimeout(r, 300));
+  }
+}
+
+const jobs: Record<MuseumSource, () => Promise<void>> = { cleveland, aic, met, smk, nga, rijks, smithsonian, europeana };
 for (const s of sources) {
   if (overBudget()) break;
   log(`start ${s} (budget ${state.total}/${budget})`);
