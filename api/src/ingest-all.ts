@@ -340,7 +340,10 @@ async function smithsonian() {
 
 // ---- Europeana (EU aggregator): needs EUROPEANA_API_KEY (api/.env) --------------------------
 // Curated art museums only (Rijksmuseum and SMK are ingested directly above); public-domain mark / CC0 items only.
-const EU_PROVIDERS = ["Nationalmuseum Sweden", "Finnish National Gallery", "Slovak national gallery", "Mauritshuis"];
+// Finnish National Gallery (401) and Mauritshuis (403) originals can't be fetched, so they are left out.
+const EU_PROVIDERS = ["Nationalmuseum Sweden", "Slovak national gallery"];
+// Only image hosts that actually serve the file; Nationalmuseum's legacy eMuseumPlus links now return HTML.
+const EU_IMAGE_HOSTS = ["nationalmuseumse.iiifhosting.com", "www.webumenia.sk"];
 
 async function europeana() {
   const key = process.env.EUROPEANA_API_KEY;
@@ -358,7 +361,7 @@ async function europeana() {
       const image = arr(it.edmIsShownBy)[0] as string | undefined;
       const title = arr(it.title)[0] as string | undefined;
       const rights = arr(it.rights)[0] as string | undefined;
-      if (!image || !title || !/publicdomain\/(mark|zero)/.test(rights ?? "")) continue;
+      if (!image || !title || !EU_IMAGE_HOSTS.includes(new URL(image).host) || !/publicdomain\/(mark|zero)/.test(rights ?? "")) continue;
       const sourceId = String(it.id).replace(/^\//, "");
       const preview = arr(it.edmPreview)[0] as string | undefined;
       out.push({

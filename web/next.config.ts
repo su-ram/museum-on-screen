@@ -16,6 +16,9 @@ const config: NextConfig = {
       { protocol: "https", hostname: "iiif.micr.io" },
       { protocol: "https", hostname: "ids.si.edu" },
       { protocol: "https", hostname: "iip-thumb.smk.dk" },
+      { protocol: "https", hostname: "api.europeana.eu" },
+      { protocol: "https", hostname: "nationalmuseumse.iiifhosting.com" },
+      { protocol: "https", hostname: "www.webumenia.sk" },
     ],
   },
 };
