@@ -4,6 +4,7 @@ import { ArtworkCard } from "@/components/ArtworkCard";
 import { ShuffleButton } from "@/components/ShuffleButton";
 import { RetryButton } from "@/components/RetryButton";
 import { listArtworks, PAGE_SIZE } from "@/lib/queries";
+import { HideTextToggle } from "@/components/HideTextToggle";
 import { OrientationFilter } from "@/components/OrientationFilter";
 import { isOrientation } from "@/lib/devices";
 
@@ -37,6 +38,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
             <div className="flex items-center gap-2">
               <ShuffleButton />
               <OrientationFilter />
+              <HideTextToggle />
             </div>
             <span>{result.total.toLocaleString()}점</span>
           </div>

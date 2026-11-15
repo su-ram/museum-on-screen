@@ -109,3 +109,6 @@ body {
   animation: glare-sweep 1.8s cubic-bezier(.2,.7,.2,1) infinite;
 }
 @media (prefers-reduced-motion: reduce) { .glare-loop::after { animation: none; opacity: 0; } }
+
+/* "사진만" mode (#14): hide per-card text in the gallery so only the artwork shows. */
+html[data-hide-text] .card-text { display: none; }
