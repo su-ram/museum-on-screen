@@ -3,7 +3,7 @@
 import { LoadingImage } from "@/components/LoadingImage";
 import { useMemo, useState } from "react";
 import { DownloadLink } from "@/components/DownloadLink";
-import { canMake, DEVICES, FIT_BACKGROUND, MODES, type DeviceType, type FitMode } from "@/lib/devices";
+import { canMake, defaultDevice, DEVICES, FIT_BACKGROUND, MODES, type DeviceType, type FitMode } from "@/lib/devices";
 import type { Wallpaper } from "@/lib/queries";
 
 type DeviceChoice = DeviceType | "original";
@@ -17,8 +17,8 @@ export function WallpaperPicker({ wallpapers, title, original, artworkId, childr
   const byKey = useMemo(() => new Map(wallpapers.map((w) => [`${w.device_type}:${w.fit_mode}`, w])), [wallpapers]);
   // A preset is available if it was pre-generated, or can be rendered on demand from the original (no upscaling).
   const makeable = (device: DeviceType, m: FitMode) => byKey.has(`${device}:${m}`) || canMake(original, device, m);
-  // Default to the original image when entering an artwork page (#9).
-  const [choice, setChoice] = useState<DeviceChoice>("original");
+  // Default by shape (#11): landscape → Desktop, portrait → Mobile; square/unknown/too small → original (#9).
+  const [choice, setChoice] = useState<DeviceChoice>(() => defaultDevice(original));
   const isOriginal = choice === "original";
   const device: DeviceType = isOriginal ? "laptop" : choice;
   const [mode, setMode] = useState<FitMode>("fill");

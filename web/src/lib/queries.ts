@@ -1,5 +1,5 @@
 import { db, wallpaperUrl } from "./supabase";
-import { HIDDEN_MUSEUMS, type DeviceType, type FitMode } from "./devices";
+import { HIDDEN_MUSEUMS, ORIENTATIONS, type DeviceType, type FitMode, type Orientation } from "./devices";
 
 export interface Wallpaper {
   id: string;
@@ -55,7 +55,7 @@ function rng(seed: number) {
 }
 
 /** All public-domain artworks in the DB (wallpapers may or may not be pre-generated). Never calls the museum APIs. */
-export async function listArtworks(opts: { q?: string; museum?: string; page?: number; shuffle?: number } = {}) {
+export async function listArtworks(opts: { q?: string; museum?: string; orientation?: Orientation; page?: number; shuffle?: number } = {}) {
   const page = Math.max(1, opts.page ?? 1);
   const q = opts.q?.trim().replace(/[,()%*\\]/g, " ");
   const seed = opts.shuffle && Number.isFinite(opts.shuffle) ? Math.floor(opts.shuffle) : 0;
@@ -67,6 +67,8 @@ export async function listArtworks(opts: { q?: string; museum?: string; page?: n
       .eq("is_public_domain", true)
       .not("museum", "in", `(${HIDDEN_MUSEUMS.join(",")})`);
     if (opts.museum) query = query.eq("museum", opts.museum);
+    const o = ORIENTATIONS.find((x) => x.type === opts.orientation);
+    if (o) query = query.gte("aspect_ratio", o.min).lte("aspect_ratio", o.max);
     if (q) query = query.or(`title.ilike.%${q}%,artist.ilike.%${q}%`);
     return query;
   };
