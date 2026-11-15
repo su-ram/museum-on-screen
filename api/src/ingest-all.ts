@@ -10,6 +10,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { upsertArtworks } from "./db.js";
+import { europeanaSize } from "./europeana-size.js";
 import { getJson, mapLimit } from "./http.js";
 import type { Artwork, MuseumSource } from "./types.js";
 
@@ -372,6 +373,7 @@ async function europeana() {
         sourceUrl: `https://www.europeana.eu/item/${sourceId}`,
       });
     }
+    await mapLimit(out, 5, async (a) => Object.assign(a, await europeanaSize(a.originalImageUrl, a.sourceId, key)));
     await flush(out);
     if (!res.nextCursor || !items.length) { state.europeana.provider++; state.europeana.cursor = "*"; } else state.europeana.cursor = res.nextCursor;
     save();
