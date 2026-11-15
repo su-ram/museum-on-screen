@@ -48,3 +48,20 @@ export function canMake(src: { width: number | null; height: number | null }, de
 
 /** Museums shown in the filter, footer and About page. */
 export const VISIBLE_MUSEUMS = Object.entries(MUSEUMS).filter(([k]) => !HIDDEN_MUSEUMS.includes(k));
+
+/** Gallery orientation filter (#11): ratio = width / height, ranges centred on screen shapes. */
+export type Orientation = "landscape" | "portrait";
+export const ORIENTATIONS: { type: Orientation; label: string; min: number; max: number }[] = [
+  // Close to 16:10 / 16:9 desktop & laptop screens.
+  { type: "landscape", label: "가로", min: 1.2, max: 2.4 },
+  // Close to ~9:19.5 phone screens.
+  { type: "portrait", label: "세로", min: 0.35, max: 0.85 },
+];
+export const isOrientation = (v: unknown): v is Orientation => ORIENTATIONS.some((o) => o.type === v);
+
+/** Detail-page default (#11): wider images → Desktop, taller → Mobile, if renderable; otherwise the original. */
+export function defaultDevice(src: { width: number | null; height: number | null }): DeviceType | "original" {
+  if (!src.width || !src.height || src.width === src.height) return "original";
+  const device: DeviceType = src.width > src.height ? "desktop" : "mobile";
+  return canMake(src, device, "fill") || canMake(src, device, "fit") ? device : "original";
+}

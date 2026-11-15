@@ -4,13 +4,16 @@ import { ArtworkCard } from "@/components/ArtworkCard";
 import { ShuffleButton } from "@/components/ShuffleButton";
 import { RetryButton } from "@/components/RetryButton";
 import { listArtworks, PAGE_SIZE } from "@/lib/queries";
+import { OrientationFilter } from "@/components/OrientationFilter";
+import { isOrientation } from "@/lib/devices";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string; museum?: string; page?: string; shuffle?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string; museum?: string; orientation?: string; page?: string; shuffle?: string }> }) {
   const sp = await searchParams;
   const page = Number(sp.page) || 1;
+  const orientation = isOrientation(sp.orientation) ? sp.orientation : undefined;
   let result: Awaited<ReturnType<typeof listArtworks>> | null = null;
   try {
-    result = await listArtworks({ q: sp.q, museum: sp.museum, page, shuffle: Number(sp.shuffle) || undefined });
+    result = await listArtworks({ q: sp.q, museum: sp.museum, orientation, page, shuffle: Number(sp.shuffle) || undefined });
   } catch (e) {
     console.error(e);
   }
@@ -19,6 +22,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
     const n = new URLSearchParams();
     if (sp.q) n.set("q", sp.q);
     if (sp.museum) n.set("museum", sp.museum);
+    if (orientation) n.set("orientation", orientation);
     if (sp.shuffle) n.set("shuffle", sp.shuffle);
     if (p > 1) n.set("page", String(p));
     return `/?${n.toString()}#gallery`;
@@ -30,7 +34,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
         <h1 className="sr-only">Museum on Screen — Bring the museum to your screen. 미술관을 내 화면 속으로.</h1>
         {result && (
           <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted">
-            <ShuffleButton />
+            <div className="flex items-center gap-2">
+              <ShuffleButton />
+              <OrientationFilter />
+            </div>
             <span>{result.total.toLocaleString()}점</span>
           </div>
         )}
