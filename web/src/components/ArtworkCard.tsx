@@ -27,18 +27,18 @@ export function ArtworkCard({ artwork: a }: { artwork: Artwork }) {
             />
           )}
           {/* Title / artist / year are hidden until hover (or keyboard focus) to keep the grid calm. */}
-          <div className="absolute inset-0 flex flex-col justify-end bg-ink/85 p-4 text-bg opacity-0 transition-opacity duration-300 group-hover/img:opacity-100 group-focus-visible/img:opacity-100">
+          <div className="card-text absolute inset-0 flex flex-col justify-end bg-ink/85 p-4 text-bg opacity-0 transition-opacity duration-300 group-hover/img:opacity-100 group-focus-visible/img:opacity-100">
             <h3 className="line-clamp-3 text-base font-medium leading-snug">{a.title}</h3>
             <p className="mt-1 line-clamp-1 text-sm opacity-80">{a.artist}</p>
             {a.year && <p className="mt-0.5 line-clamp-1 text-xs opacity-60">{a.year}</p>}
           </div>
         </div>
       </Link>
-      <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-muted">
+      <p className="card-text mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-muted">
         <span className="h-1.5 w-1.5 rounded-full bg-accent" />
         {MUSEUMS[a.museum] ?? a.museum}
       </p>
-      <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+      <ul className="card-text mt-3 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
         {downloads.map(({ d, href }) => (
           <li key={d.type}>
             <DownloadLink href={href} busyLabel={`${d.label} 만드는 중…`} className="inline-block py-1 underline underline-offset-4 decoration-line hover:decoration-accent">{d.label}</DownloadLink>
