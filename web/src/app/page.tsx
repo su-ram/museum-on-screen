@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { ArtworkCard } from "@/components/ArtworkCard";
 import { ShuffleButton } from "@/components/ShuffleButton";
 import { RetryButton } from "@/components/RetryButton";
-import { listArtworks, PAGE_SIZE } from "@/lib/queries";
+import { listArtworks } from "@/lib/queries";
 import { HideTextToggle } from "@/components/HideTextToggle";
 import { OrientationFilter } from "@/components/OrientationFilter";
 import { isOrientation } from "@/lib/devices";
@@ -18,7 +18,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
   } catch (e) {
     console.error(e);
   }
-  const pages = result ? Math.ceil(result.total / PAGE_SIZE) : 0;
+  const pages = result?.pages ?? 0;
   const href = (p: number) => {
     const n = new URLSearchParams();
     if (sp.q) n.set("q", sp.q);

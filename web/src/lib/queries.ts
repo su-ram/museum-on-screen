@@ -1,4 +1,5 @@
 import { db, wallpaperUrl } from "./supabase";
+import { isRangeError, reconcile } from "./paging";
 import { HIDDEN_MUSEUMS, ORIENTATIONS, type DeviceType, type FitMode, type Orientation } from "./devices";
 
 export interface Wallpaper {
@@ -63,7 +64,7 @@ export async function listArtworks(opts: { q?: string; museum?: string; orientat
   const base = (count: "exact" | "planned", head = false) => {
     let query = db()
       .from("artworks")
-      .select(`${COLS}, wallpapers(${WP})`, { count, head })
+      .select(head ? "id" : `${COLS}, wallpapers(${WP})`, head ? { count, head } : undefined)
       .eq("is_public_domain", true)
       .not("museum", "in", `(${HIDDEN_MUSEUMS.join(",")})`);
     if (opts.museum) query = query.eq("museum", opts.museum);
@@ -72,48 +73,58 @@ export async function listArtworks(opts: { q?: string; museum?: string; orientat
     if (q) query = query.or(`title.ilike.%${q}%,artist.ilike.%${q}%`);
     return query;
   };
-  // Random-looking but stable order: ids are random v4 UUIDs, so museums and artists come out mixed
-  // (instead of A–Z by artist, where one name can fill a whole page) and paging stays consistent.
-  const range = (count: "exact" | "planned", from: number, to: number) => base(count).order("id").range(from, to);
+  // Random-looking but stable order (see fetchRange): ids are random v4 UUIDs, so museums and artists come
+  // out mixed (instead of A–Z by artist, where one name can fill a whole page) and paging stays consistent.
 
-  // The exact row count is the expensive part. If the DB hits its statement timeout (e.g. while bulk
-  // ingests are writing), retry with the planner's estimate instead of failing the whole page.
-  const withRetry = async <T extends { error: { message: string } | null }>(f: (c: "exact" | "planned") => PromiseLike<T>) => {
-    let res = await f("exact");
-    for (let i = 0; i < 2 && res.error && /timeout/i.test(res.error.message); i++) {
-      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-      res = await f("planned");
+  // The exact row count is the expensive part. If it fails (e.g. statement timeout while bulk ingests
+  // are writing), fall back to the planner's estimate, and finally to no count at all — the page itself
+  // must never fail just because counting did (#16).
+  const countRows = async (): Promise<number | null> => {
+    for (const c of ["exact", "planned", "planned"] as const) {
+      const res = await base(c, true);
+      if (!res.error) return res.count ?? 0;
+      await new Promise((r) => setTimeout(r, 300));
     }
-    return res;
+    return null;
+  };
+  // Row fetch without a count; a range past the end is just an empty page, not an error.
+  const fetchRange = async (from: number, to: number): Promise<Raw[]> => {
+    let last: { message: string } | null = null;
+    for (let i = 0; i < 3; i++) {
+      const res = await base("planned").order("id").range(from, to);
+      if (!res.error) return (res.data ?? []) as unknown as Raw[];
+      if (isRangeError(res.error)) return [];
+      last = res.error;
+      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    }
+    throw new Error(last?.message ?? "artworks query failed");
   };
 
   let rows: Raw[];
   let total: number;
+  let pages: number;
   if (!seed) {
-    const res = await withRetry((c) => range(c, (page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1));
-    if (res.error) throw new Error(res.error.message);
-    rows = (res.data ?? []) as unknown as Raw[];
-    total = res.count ?? 0;
+    // Ask for one extra row so we know whether a next page exists without trusting the count.
+    const from = (page - 1) * PAGE_SIZE;
+    const [got, count] = await Promise.all([fetchRange(from, from + PAGE_SIZE), countRows()]);
+    const hasMore = got.length > PAGE_SIZE;
+    rows = got.slice(0, PAGE_SIZE);
+    ({ total, pages } = reconcile({ count, page, pageSize: PAGE_SIZE, got: rows.length, hasMore }));
   } else {
     // Shuffle: rotate the stable id order by a seeded offset (wrapping around), then shuffle each page.
     // Every page of one seed stays consistent, and a new seed gives a different order.
-    const head = await withRetry((c) => base(c, true));
-    if (head.error) throw new Error(head.error.message);
-    total = head.count ?? 0;
+    const count = await countRows();
+    if (count === null) throw new Error("artworks count failed");
+    total = count;
+    pages = Math.ceil(total / PAGE_SIZE);
     const offset = total ? Math.floor(rng(seed)() * total) : 0;
     const from = (offset + (page - 1) * PAGE_SIZE) % Math.max(total, 1);
     const want = Math.max(0, Math.min(PAGE_SIZE, total - (page - 1) * PAGE_SIZE));
     rows = [];
     if (want > 0) {
       const first = Math.min(want, total - from);
-      const a = await withRetry((c) => range(c, from, from + first - 1));
-      if (a.error) throw new Error(a.error.message);
-      rows = (a.data ?? []) as unknown as Raw[];
-      if (first < want) {
-        const b = await withRetry((c) => range(c, 0, want - first - 1));
-        if (b.error) throw new Error(b.error.message);
-        rows = rows.concat((b.data ?? []) as unknown as Raw[]);
-      }
+      rows = await fetchRange(from, from + first - 1);
+      if (first < want) rows = rows.concat(await fetchRange(0, want - first - 1));
       const rand = rng(seed + page);
       for (let i = rows.length - 1; i > 0; i--) {
         const j = Math.floor(rand() * (i + 1));
@@ -121,7 +132,7 @@ export async function listArtworks(opts: { q?: string; museum?: string; orientat
       }
     }
   }
-  return { artworks: rows.map(hydrate), total, page };
+  return { artworks: rows.map(hydrate), total, pages, page };
 }
 
 export async function getArtwork(id: string): Promise<Artwork | null> {
