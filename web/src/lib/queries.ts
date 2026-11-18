@@ -1,4 +1,5 @@
 import { db, wallpaperUrl } from "./supabase";
+import { fixTotal, shuffleRanges } from "./paging";
 import { HIDDEN_MUSEUMS, ORIENTATIONS, type DeviceType, type FitMode, type Orientation } from "./devices";
 
 export interface Wallpaper {
@@ -60,10 +61,10 @@ export async function listArtworks(opts: { q?: string; museum?: string; orientat
   const q = opts.q?.trim().replace(/[,()%*\\]/g, " ");
   const seed = opts.shuffle && Number.isFinite(opts.shuffle) ? Math.floor(opts.shuffle) : 0;
 
-  const base = (count: "exact" | "planned", head = false) => {
+  const base = (count?: "exact" | "planned" | "estimated", head = false) => {
     let query = db()
       .from("artworks")
-      .select(`${COLS}, wallpapers(${WP})`, { count, head })
+      .select(head ? "id" : `${COLS}, wallpapers(${WP})`, count ? { count, head } : { head })
       .eq("is_public_domain", true)
       .not("museum", "in", `(${HIDDEN_MUSEUMS.join(",")})`);
     if (opts.museum) query = query.eq("museum", opts.museum);
@@ -74,51 +75,46 @@ export async function listArtworks(opts: { q?: string; museum?: string; orientat
   };
   // Random-looking but stable order: ids are random v4 UUIDs, so museums and artists come out mixed
   // (instead of A–Z by artist, where one name can fill a whole page) and paging stays consistent.
-  const range = (count: "exact" | "planned", from: number, to: number) => base(count).order("id").range(from, to);
+  // Rows are fetched WITHOUT a count (#16): with count=planned PostgREST answers 416 (PGRST103) whenever
+  // the offset is past the planner's estimate, which broke every page after the first.
+  const range = async (from: number, to: number) => {
+    if (to < from) return [] as Raw[];
+    const res = await base().order("id").range(from, to);
+    if (res.error) throw new Error(res.error.message);
+    return (res.data ?? []) as unknown as Raw[];
+  };
 
   // The exact row count is the expensive part. If the DB hits its statement timeout (e.g. while bulk
-  // ingests are writing), retry with the planner's estimate instead of failing the whole page.
-  const withRetry = async <T extends { error: { message: string } | null }>(f: (c: "exact" | "planned") => PromiseLike<T>) => {
-    let res = await f("exact");
-    for (let i = 0; i < 2 && res.error && /timeout/i.test(res.error.message); i++) {
-      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-      res = await f("planned");
+  // ingests are writing), fall back to the planner's estimate instead of failing the whole page.
+  const count = async (): Promise<number | null> => {
+    for (const c of ["exact", "planned", "estimated"] as const) {
+      const res = await base(c, true);
+      if (!res.error && res.count != null) return res.count;
     }
-    return res;
+    return null;
   };
 
   let rows: Raw[];
   let total: number;
   if (!seed) {
-    const res = await withRetry((c) => range(c, (page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1));
-    if (res.error) throw new Error(res.error.message);
-    rows = (res.data ?? []) as unknown as Raw[];
-    total = res.count ?? 0;
+    const from = (page - 1) * PAGE_SIZE;
+    const [r, c] = await Promise.all([range(from, from + PAGE_SIZE - 1), count()]);
+    rows = r;
+    total = fixTotal(c, from, rows.length, PAGE_SIZE);
   } else {
     // Shuffle: rotate the stable id order by a seeded offset (wrapping around), then shuffle each page.
     // Every page of one seed stays consistent, and a new seed gives a different order.
-    const head = await withRetry((c) => base(c, true));
-    if (head.error) throw new Error(head.error.message);
-    total = head.count ?? 0;
+    const c = await count();
+    if (c == null) throw new Error("could not count artworks");
+    total = c;
     const offset = total ? Math.floor(rng(seed)() * total) : 0;
-    const from = (offset + (page - 1) * PAGE_SIZE) % Math.max(total, 1);
-    const want = Math.max(0, Math.min(PAGE_SIZE, total - (page - 1) * PAGE_SIZE));
+    const parts = shuffleRanges(total, offset, page, PAGE_SIZE);
     rows = [];
-    if (want > 0) {
-      const first = Math.min(want, total - from);
-      const a = await withRetry((c) => range(c, from, from + first - 1));
-      if (a.error) throw new Error(a.error.message);
-      rows = (a.data ?? []) as unknown as Raw[];
-      if (first < want) {
-        const b = await withRetry((c) => range(c, 0, want - first - 1));
-        if (b.error) throw new Error(b.error.message);
-        rows = rows.concat((b.data ?? []) as unknown as Raw[]);
-      }
-      const rand = rng(seed + page);
-      for (let i = rows.length - 1; i > 0; i--) {
-        const j = Math.floor(rand() * (i + 1));
-        [rows[i], rows[j]] = [rows[j], rows[i]];
-      }
+    for (const [from, to] of parts) rows = rows.concat(await range(from, to));
+    const rand = rng(seed + page);
+    for (let i = rows.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [rows[i], rows[j]] = [rows[j], rows[i]];
     }
   }
   return { artworks: rows.map(hydrate), total, page };
