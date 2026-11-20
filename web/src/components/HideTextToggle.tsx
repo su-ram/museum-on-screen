@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 const KEY = "mos:hide-text";
 
-/** Gallery "photos only" toggle (#14): hides per-card text (museum name, device links, hover caption). */
+/** Gallery "photos only" switch (#14, #19): hides per-card text (museum name, device links, hover caption). */
 export function HideTextToggle() {
   const [hidden, setHidden] = useState(false);
 
@@ -22,15 +22,26 @@ export function HideTextToggle() {
     localStorage.setItem(KEY, next ? "1" : "0");
   }
 
+  // #19: icon + on/off switch only (no text label). On = photos-only mode.
   return (
     <button
+      type="button"
+      role="switch"
       onClick={toggle}
-      aria-pressed={hidden}
-      aria-label={hidden ? "작품 정보 보이기" : "작품 정보 숨기기"}
+      aria-checked={hidden}
+      aria-label="사진만 보기"
       title={hidden ? "정보 보이기" : "사진만 보기"}
-      className={`h-9 border px-3 text-sm transition-colors ${hidden ? "border-ink bg-ink text-bg" : "border-line text-ink hover:border-ink"}`}
+      className="group flex h-9 items-center gap-2 border border-line px-2 text-ink transition-colors hover:border-ink"
     >
-      {hidden ? "정보 보기" : "사진만"}
+      <span aria-hidden="true" className="text-base leading-none">🖼️</span>
+      <span
+        aria-hidden="true"
+        className={`relative inline-block h-5 w-9 rounded-full transition-colors ${hidden ? "bg-ink" : "bg-line"}`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-bg shadow transition-transform ${hidden ? "translate-x-4" : ""}`}
+        />
+      </span>
     </button>
   );
 }
